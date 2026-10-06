@@ -1,0 +1,314 @@
+/* ─── Google Fonts — must be first ──────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Root tokens ──────────────────────────────────────────────────── */
+:root {
+  --bg-void:    #05070B;
+  --bg-base:    #0A0F16;
+  --bg-card:    #0D131C;
+  --bg-ele:     #111923;
+  --border:     #1D2A38;
+  --cyan:       #22D3EE;
+  --cyan-dim:   rgba(34,211,238,0.15);
+  --cyan-glow:  rgba(34,211,238,0.25);
+  --amber:      #F59E0B;
+  --red:        #EF4444;
+  --green:      #22C55E;
+  --purple:     #A78BFA;
+}
+
+/* ─── Base reset ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg-void);
+  color: #e2e8f0;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: #1D2A38; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2A3D52; }
+
+/* ─── Cyber background with grid + particles ───────────────────────── */
+.cyber-bg {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(5,7,11,1) 0%, rgba(8,13,20,1) 100%);
+}
+
+.cyber-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ambient corner glows */
+.cyber-bg::after {
+  content: '';
+  position: fixed;
+  top: -20%;
+  left: -10%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(ellipse at center, rgba(34,211,238,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cyber-glow-corner {
+  position: fixed;
+  bottom: -10%;
+  right: -5%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(ellipse at center, rgba(167,139,250,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Particle canvas ──────────────────────────────────────────────── */
+#particle-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.5;
+}
+
+/* ─── All content above bg layers ─────────────────────────────────── */
+.content-layer {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── Count-up animation helper ────────────────────────────────────── */
+.count-up {
+  animation: countup 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes countup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── KPI card hover elevation ─────────────────────────────────────── */
+.kpi-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+/* ─── Critical pulse ────────────────────────────────────────────────── */
+@keyframes critical-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.2); }
+  50%       { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+.critical-pulse {
+  animation: critical-pulse 2.5s ease-in-out infinite;
+}
+
+/* Warning pulse */
+@keyframes warn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
+  50%       { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+}
+.warn-pulse {
+  animation: warn-pulse 3s ease-in-out infinite;
+}
+
+/* ─── Live status dot ────────────────────────────────────────────────── */
+@keyframes live-ping {
+  0%   { transform: scale(1); opacity: 1; }
+  70%  { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.live-dot { position: relative; display: inline-block; }
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: live-ping 1.8s ease-out infinite;
+}
+
+/* ─── Pipeline stage animations ─────────────────────────────────────── */
+@keyframes flow-dash {
+  from { stroke-dashoffset: 20; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes stage-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,211,238,0.3); }
+  50%       { box-shadow: 0 0 20px rgba(34,211,238,0.6), 0 0 40px rgba(34,211,238,0.2); }
+}
+.stage-active {
+  animation: stage-glow 2s ease-in-out infinite;
+}
+
+@keyframes connector-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+.connector-active {
+  background: linear-gradient(90deg, #1D2A38 0%, #22D3EE 50%, #1D2A38 100%);
+  background-size: 200% 100%;
+  animation: connector-flow 1.5s linear infinite;
+}
+
+/* ─── Repair progress bar ────────────────────────────────────────────── */
+@keyframes progress-indeterminate {
+  0%   { left: -40%; width: 40%; }
+  60%  { left: 60%; width: 40%; }
+  100% { left: 100%; width: 0; }
+}
+.progress-bar-indeterminate {
+  position: relative;
+  overflow: hidden;
+}
+.progress-bar-indeterminate::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.8), transparent);
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+/* ─── Fade-in-up for metrics reveal ─────────────────────────────────── */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+.fade-in-up-delay-1 { animation-delay: 0.1s; opacity: 0; }
+.fade-in-up-delay-2 { animation-delay: 0.2s; opacity: 0; }
+.fade-in-up-delay-3 { animation-delay: 0.3s; opacity: 0; }
+
+/* ─── Recovery status transition ─────────────────────────────────────── */
+@keyframes recovering-pulse {
+  0%, 100% { color: #EF4444; }
+  50%       { color: #22D3EE; }
+}
+.recovering-text {
+  animation: recovering-pulse 1.4s ease-in-out infinite;
+}
+
+/* ─── Toast notification ─────────────────────────────────────────────── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(120%) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(120%) scale(0.95); }
+}
+.toast-enter { animation: toast-in 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
+.toast-exit  { animation: toast-out 0.25s ease-in forwards; }
+
+/* ─── Skeleton loader ────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #0D131C 25%, #1D2A38 50%, #0D131C 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* ─── Approved banner ────────────────────────────────────────────────── */
+@keyframes approved-sweep {
+  from { opacity: 0; transform: scaleX(0); transform-origin: left; }
+  to   { opacity: 1; transform: scaleX(1); transform-origin: left; }
+}
+.approved-banner {
+  animation: approved-sweep 0.6s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+
+/* ─── Metric bar fill ────────────────────────────────────────────────── */
+@keyframes bar-fill {
+  from { width: 0%; }
+}
+.metric-bar {
+  animation: bar-fill 0.8s cubic-bezier(0.16,1,0.3,1) forwards;
+  animation-delay: 0.2s;
+  width: 0%;
+}
+
+/* ─── Card expand/collapse ───────────────────────────────────────────── */
+.panel-expand {
+  animation: fade-in-up 0.3s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+
+/* ─── Button micro-interactions ──────────────────────────────────────── */
+.btn-cyber {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-cyber:hover  { transform: translateY(-1px); }
+.btn-cyber:active { transform: translateY(0); }
+.btn-cyber::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0);
+  transition: background 0.15s ease;
+}
+.btn-cyber:hover::after { background: rgba(255,255,255,0.04); }
+
+/* ─── Tooltip ────────────────────────────────────────────────────────── */
+.tooltip-wrap { position: relative; }
+.tooltip-wrap .tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1D2A38;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #2A3D52;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 999;
+}
+.tooltip-wrap:hover .tooltip { opacity: 1; }
+
+/* ─── Reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Mono font utility ──────────────────────────────────────────────── */
+.font-mono { font-family: 'JetBrains Mono', monospace; }
