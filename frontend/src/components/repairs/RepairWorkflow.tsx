@@ -53,11 +53,13 @@ export default function RepairWorkflow({ incident }: Props) {
   const [recoverStep, setRecoverStep] = useState(0); // 0 = anomalous, 1 = recovering, 2 = healthy
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
-  const initiatedForIncident = useRef<number | null>(null);
+  const initializedIncidentIdRef = useRef<number | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const stopPolling = () => {
     if (pollIntervalRef.current) {
@@ -86,46 +88,55 @@ export default function RepairWorkflow({ incident }: Props) {
       stopPolling();
       stopProgress();
       clearPendingTimeout();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
     };
   }, []);
 
-  // Reset state when incident changes
+  // Main lifecycle effect for loading/initializing incident repair workflow
   useEffect(() => {
-    if (incident.id !== initiatedForIncident.current) {
-      stopPolling();
-      stopProgress();
-      clearPendingTimeout();
+    stopPolling();
+    stopProgress();
+    clearPendingTimeout();
+
+    // Abort any prior in-flight load request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // Reset workflow state when switching to a different incident
+    if (initializedIncidentIdRef.current !== incident.id) {
       setRepair(null);
       setTestRun(null);
       setProposalError(null);
       setIsGenerating(false);
       setStatus('IDLE');
-      setLoading(false);
       setProgress(0);
       setRecoverStep(0);
-      initiatedForIncident.current = null;
     }
-  }, [incident.id]);
 
-  useEffect(() => {
-    if (status !== 'IDLE' || initiatedForIncident.current === incident.id) {
-      return;
-    }
-    initiatedForIncident.current = incident.id;
+    setLoading(true);
 
+    let isCancelled = false;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    abortControllerRef.current = controller;
 
-    const initiateRepair = async () => {
-      setLoading(true);
-      setProposalError(null);
-      setIsGenerating(false);
+    // Timeout of 8 seconds for loading incident details
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 8000);
 
+    const loadWorkflow = async () => {
       const isResolvedIncident = incident.status === 'RESOLVED';
       const isActiveIncident = incident.status === 'ACTIVE';
 
       try {
-        const getRes = await fetch(`http://localhost:8000/api/incidents/${incident.id}`, { signal: controller.signal });
+        const getRes = await fetch(`http://localhost:8000/api/incidents/${incident.id}`, {
+          signal: controller.signal
+        });
         if (!getRes.ok) {
           let errorMsg = `Failed to fetch incident details (${getRes.status})`;
           try {
@@ -135,8 +146,9 @@ export default function RepairWorkflow({ incident }: Props) {
           throw new Error(errorMsg);
         }
         const incidentData = await getRes.json();
-        
-        // Find existing repairs from incident response
+        if (isCancelled) return;
+
+        // Extract existing repairs from response
         const rawRepairs = incidentData.repairs || incidentData.incident?.repairs || (incident as any).repairs || [];
         const repairsList = Array.isArray(rawRepairs) ? rawRepairs : [];
         let foundRepair = null;
@@ -152,6 +164,7 @@ export default function RepairWorkflow({ incident }: Props) {
         // 1. Incident status is ACTIVE
         // 2. No existing repair proposal exists
         if (!foundRepair && isActive) {
+          if (isCancelled) return;
           setIsGenerating(true);
           const res = await fetch('http://localhost:8000/api/repairs', {
             method: 'POST',
@@ -179,12 +192,14 @@ export default function RepairWorkflow({ incident }: Props) {
             status: 'APPROVED'
           };
         }
-        
-        clearTimeout(timeoutId);
 
-        if (initiatedForIncident.current === incident.id && foundRepair) {
+        if (isCancelled) return;
+
+        if (foundRepair) {
           setRepair(foundRepair);
-          
+          // Mark incident as initialized ONLY after async fetch/creation has completed successfully
+          initializedIncidentIdRef.current = incident.id;
+
           let newStatus: WorkflowStatus = 'PROPOSED';
           if (isResolved || foundRepair.status === 'APPROVED') {
             newStatus = 'APPROVED';
@@ -199,14 +214,16 @@ export default function RepairWorkflow({ incident }: Props) {
           }
 
           setStatus(newStatus);
-          
+
           if (newStatus === 'APPROVED') {
             setRecoverStep(2);
           }
 
-          // Fetch test runs independently
+          // Fetch test runs independently if repair id exists
           if (foundRepair.id) {
-            fetch(`http://localhost:8000/api/repairs/${foundRepair.id}/test-runs`)
+            fetch(`http://localhost:8000/api/repairs/${foundRepair.id}/test-runs`, {
+              signal: controller.signal
+            })
               .then(async (r) => {
                 if (!r.ok) {
                   throw new Error(`HTTP ${r.status}`);
@@ -214,6 +231,7 @@ export default function RepairWorkflow({ incident }: Props) {
                 return r.json();
               })
               .then(data => {
+                if (isCancelled) return;
                 const run = extractTestRun(data);
                 if (run) {
                   setTestRun(run);
@@ -226,41 +244,50 @@ export default function RepairWorkflow({ incident }: Props) {
                   }
                 }
               })
-              .catch(console.error);
+              .catch(err => {
+                if (err.name !== 'AbortError') {
+                  console.error('Failed to fetch test runs:', err);
+                }
+              });
           }
+        } else {
+          throw new Error('No remediation proposal could be found or generated for this incident.');
         }
       } catch (e: any) {
-        const errorMsg = e.name === 'AbortError'
-          ? 'Repair generation timed out'
-          : (e?.message || 'Failed to generate repair proposal');
-        if (e.name !== 'AbortError') {
-          console.error(e);
-        }
+        if (isCancelled) return;
+        const isTimeout = controller.signal.aborted;
+        const errorMsg = isTimeout
+          ? 'Remediation request timed out after 8s. Please retry.'
+          : (e?.message || 'Failed to load incident remediation');
+
+        console.error('Error loading repair workflow:', e);
         addToast(errorMsg, 'error');
-        if (initiatedForIncident.current === incident.id) {
-          setProposalError(errorMsg);
-        }
+        setProposalError(errorMsg);
       } finally {
-        if (initiatedForIncident.current === incident.id) {
+        clearTimeout(timeoutId);
+        if (!isCancelled) {
           setLoading(false);
           setIsGenerating(false);
         }
       }
     };
 
-    initiateRepair();
+    loadWorkflow();
 
     return () => {
-      controller.abort();
+      isCancelled = true;
       clearTimeout(timeoutId);
+      controller.abort();
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     };
-  }, [incident.id, incident.status, status, addToast]);
+  }, [incident.id, retryTrigger]);
 
   const handleRetryProposal = () => {
     setProposalError(null);
-    setIsGenerating(false);
-    initiatedForIncident.current = null;
-    setStatus('IDLE');
+    setLoading(true);
+    setRetryTrigger(c => c + 1);
   };
 
   const handleValidationComplete = (run: any) => {
@@ -412,14 +439,19 @@ export default function RepairWorkflow({ incident }: Props) {
   };
 
   if (proposalError && !repair) {
+    const isResolved = incident.status === 'RESOLVED';
     return (
       <div className="rounded-xl border border-red-500/30 bg-[#0D131C] p-6 shadow-lg fade-in-up">
         <div className="flex justify-between items-start mb-4">
           <div>
             <h3 className="text-sm font-bold text-red-400 uppercase tracking-widest font-mono mb-1">
-              Remediation Proposal Failed
+              {isResolved ? 'Remediation Load Error' : 'Remediation Proposal Failed'}
             </h3>
-            <p className="text-xs text-gray-500">Failed to generate repair proposal for incident INC-{String(incident.id).padStart(4, '0')}.</p>
+            <p className="text-xs text-gray-500">
+              {isResolved
+                ? `Failed to load repair details for resolved incident INC-${String(incident.id).padStart(4, '0')}.`
+                : `Failed to generate or retrieve repair proposal for incident INC-${String(incident.id).padStart(4, '0')}.`}
+            </p>
           </div>
           <span className="text-[10px] font-bold px-2.5 py-1 rounded border uppercase tracking-wider font-mono bg-red-500/15 text-red-400 border-red-500/30">
             ERROR
@@ -434,7 +466,7 @@ export default function RepairWorkflow({ incident }: Props) {
           disabled={loading}
           className="btn-cyber w-full bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/50 text-cyan-400 font-bold uppercase tracking-wider text-xs py-3 rounded-lg transition-colors disabled:opacity-50"
         >
-          {loading ? 'Retrying…' : '↻ Retry Generating Proposal'}
+          {loading ? 'Retrying…' : isResolved ? '↻ Retry Loading Remediation' : '↻ Retry Generating Proposal'}
         </button>
       </div>
     );
